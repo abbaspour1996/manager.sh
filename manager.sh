@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Script Name: The Punisher v4.0 (Nightmare)
+# Script Name: The Punisher v5.0 (Lockdown Edition)
 # ==========================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -26,8 +26,9 @@ touch "$LOG_FILE"
 header() {
     clear
     echo -e "${RED}====================================================${NC}"
-    echo -e "${YELLOW}       XPanel User Manager v4.0 (Nightmare)         ${NC}"
+    echo -e "${YELLOW}    XPanel User Manager v5.0 (Account Lockdown)     ${NC}"
     echo -e "${RED}====================================================${NC}"
+    echo -e "Method: Locking accounts periodically (Auth Failed error)."
     echo ""
 }
 
@@ -35,32 +36,21 @@ log_action() {
     echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# تابع کشتن رگباری
-kill_user_burst() {
-    local target_user=$1
-    # این حلقه به مدت 15 ثانیه، هر ثانیه یوزر را چک و قطع می‌کند
-    # تا اجازه ندهد بلافاصله ریکانکت شود.
-    for i in {1..10}; do
-        # پیدا کردن تمام پروسه‌های یوزر (SSH و غیره)
-        PIDS=$(pgrep -u "$target_user")
-        SSH_PIDS=$(ps -ef | grep "sshd: $target_user" | grep -v grep | awk '{print $2}')
-        
-        ALL_PIDS="$PIDS $SSH_PIDS"
-        
-        if [ ! -z "$ALL_PIDS" ] && [ "$ALL_PIDS" != " " ]; then
-            # حذف پروسه‌ها با نهایت خشونت
-            echo "$ALL_PIDS" | xargs -r kill -9 > /dev/null 2>&1
-            pkill -9 -u "$target_user" > /dev/null 2>&1
-            killall -9 -u "$target_user" > /dev/null 2>&1
-        fi
-        sleep 1 # یک ثانیه مکث و دوباره ضربه زدن
-    done
-    log_action "Targeted $target_user with Burst Mode (10s lock)."
+# باز کردن قفل همه یوزرها (برای وقتی که استپ میکنی)
+unlock_all_users() {
+    if [ -s "$USER_LIST" ]; then
+        echo -e "${YELLOW}Unlocking all users...${NC}"
+        while IFS= read -r user; do
+            passwd -u "$user" >/dev/null 2>&1
+            # usermod -U "$user" >/dev/null 2>&1
+            log_action "User $user UNLOCKED (Rescue)."
+        done < "$USER_LIST"
+    fi
 }
 
 add_user() {
     header
-    echo -e "${RED}Adding User to Blacklist${NC}"
+    echo -e "${RED}Adding User to List${NC}"
     read -p "Enter Username: " username
     if id "$username" &>/dev/null; then
         if grep -Fxq "$username" "$USER_LIST"; then
@@ -70,8 +60,7 @@ add_user() {
              echo -e "${GREEN}User '$username' added.${NC}"
         fi
     else
-        echo -e "${RED}User '$username' not found! Added to list anyway.${NC}"
-        echo "$username" >> "$USER_LIST"
+        echo -e "${RED}User '$username' does not exist!${NC}"
     fi
     sleep 1
 }
@@ -82,53 +71,47 @@ remove_user() {
     cat -n "$USER_LIST"
     echo "----------------"
     read -p "Enter Username to remove: " selection
+    # قبل از حذف از لیست، مطمئن میشیم آنلاک شده باشه
+    passwd -u "$selection" >/dev/null 2>&1
+    
     sed -i "/^$selection$/d" "$USER_LIST"
-    echo -e "${GREEN}Removed $selection${NC}"
+    echo -e "${GREEN}Removed and Unlocked $selection${NC}"
     sleep 1
-}
-
-test_run() {
-    header
-    echo -e "${YELLOW}Running BURST TEST (10 seconds attack)...${NC}"
-    if [ ! -s "$USER_LIST" ]; then
-        echo "List is empty."
-        read -p "..."
-        return
-    fi
-
-    while IFS= read -r user; do
-        echo -e "Attacking: ${RED}$user${NC}"
-        kill_user_burst "$user"
-        echo -e "${GREEN}Attack finished for $user.${NC}"
-    done < "$USER_LIST"
-    read -p "Press Enter..."
 }
 
 start_punishment() {
     if [ -f "$PID_FILE" ]; then
-        if ps -p $(cat "$PID_FILE") > /dev/null; then
-            echo "Already running."
-            sleep 1
-            return
-        fi
+        echo "Already running."
+        sleep 1
+        return
     fi
     
-    echo -e "${RED}Starting Nightmare Monitor...${NC}"
+    echo -e "${RED}Starting Lockdown Cycle...${NC}"
+    echo -e "${YELLOW}Users will be LOCKED for 60s, then UNLOCKED for 60s.${NC}"
     
-    # اجرای حلقه اصلی
     nohup bash -c "
     while true; do
+        # === PHASE 1: LOCK & KILL (60 Seconds) ===
         if [ -s $USER_LIST ]; then
+            echo \"[$(date '+%H:%M:%S')] >>> LOCKING USERS\" >> $LOG_FILE
             while IFS= read -r user; do
-                # اجرای حمله رگباری برای هر یوزر
-                for i in {1..12}; do
-                   pgrep -u \"\$user\" | xargs -r kill -9
-                   ps -ef | grep \"sshd: \$user\" | grep -v grep | awk '{print \$2}' | xargs -r kill -9
-                   sleep 1
-                done
+                passwd -l \"\$user\" >/dev/null 2>&1  # قفل کردن پسورد
+                
+                # قطع کردن اتصالات
+                pgrep -u \"\$user\" | xargs -r kill -9
+                ps -ef | grep \"sshd: \$user\" | awk '{print \$2}' | xargs -r kill -9
             done < $USER_LIST
         fi
-        sleep 120 # دو دقیقه استراحت
+        sleep 60 
+
+        # === PHASE 2: UNLOCK (60 Seconds) ===
+        if [ -s $USER_LIST ]; then
+             echo \"[$(date '+%H:%M:%S')] >>> UNLOCKING USERS\" >> $LOG_FILE
+             while IFS= read -r user; do
+                passwd -u \"\$user\" >/dev/null 2>&1 # باز کردن پسورد
+             done < $USER_LIST
+        fi
+        sleep 60
     done" >/dev/null 2>&1 &
     
     echo $! > "$PID_FILE"
@@ -138,11 +121,41 @@ start_punishment() {
 
 stop_punishment() {
     if [ -f "$PID_FILE" ]; then
-        kill $(cat "$PID_FILE")
+        PID=$(cat "$PID_FILE")
+        kill $PID
         rm "$PID_FILE"
-        echo -e "${GREEN}Stopped.${NC}"
+        echo -e "${GREEN}Monitor Stopped.${NC}"
+        log_action "Monitor Stopped."
+        
+        # خیلی مهم: بازگرداندن دسترسی یوزرها
+        unlock_all_users
+    else
+        echo "Not running."
     fi
-    sleep 1
+    sleep 2
+}
+
+# تست دستی برای اطمینان
+test_lock() {
+    header
+    echo -e "${RED}TEST MODE: Locking users for 10 seconds...${NC}"
+    if [ ! -s "$USER_LIST" ]; then echo "List empty."; sleep 1; return; fi
+    
+    while IFS= read -r user; do
+        echo -e "Locking $user..."
+        passwd -l "$user"
+        pkill -9 -u "$user"
+    done < "$USER_LIST"
+    
+    echo -e "${YELLOW}Users are now LOCKED. Try to connect with VPN now! (Wait 10s)${NC}"
+    sleep 10
+    
+    echo -e "${GREEN}Unlocking users...${NC}"
+    while IFS= read -r user; do
+        passwd -u "$user"
+    done < "$USER_LIST"
+    echo "Done."
+    read -p "Press Enter..."
 }
 
 show_logs() {
@@ -154,17 +167,18 @@ show_logs() {
 while true; do
     header
     if [ -f "$PID_FILE" ] && ps -p $(cat "$PID_FILE") > /dev/null; then
-        echo -e "Status: ${RED}ACTIVE (Nightmare Mode)${NC}"
+        echo -e "Status: ${RED}ACTIVE (Lock/Unlock Cycle)${NC}"
     else
         echo -e "Status: ${GREEN}INACTIVE${NC}"
     fi
     
-    echo "1) Add User (Diakoone)"
+    echo "1) Add User"
     echo "2) Remove User"
     echo "3) Show List"
-    echo "4) START Punishment (ON)"
-    echo "5) STOP Punishment (OFF)"
-    echo "6) TEST BURST (Manual Attack)"
+    echo "4) START Lockdown (60s Off / 60s On)"
+    echo "5) STOP Lockdown (Unlock Everyone)"
+    echo "6) TEST LOCK (10s Test)"
+    echo "7) Watch Logs"
     echo "0) Exit"
     echo ""
     read -p "Select: " opt
@@ -175,7 +189,8 @@ while true; do
         3) cat "$USER_LIST"; read -p "..." ;;
         4) start_punishment ;;
         5) stop_punishment ;;
-        6) test_run ;;
+        6) test_lock ;;
+        7) show_logs ;;
         0) exit 0 ;;
     esac
 done
