@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v10.2 (Pay Your Bill)
-# Timing: 10 Min OFF / 5 Min ON
+# Script Name: XPanel Manager v10.3 (Banner Test Mode)
+# Timing: 30 Sec OFF / 5 Min ON
 # Message: "Server is fine, Pay your bill..."
 # ===============================================
 
@@ -31,14 +31,14 @@ write_log() {
 }
 
 # ====================================================
-# سرویس پشت‌صحنه (۱۰ دقیقه قطع / ۵ دقیقه وصل)
+# سرویس پشت‌صحنه (۳۰ ثانیه قطع / ۵ دقیقه وصل)
 # ====================================================
 if [ "$1" == "--service-run" ]; then
-    write_log "--- SERVICE STARTED v10.2 ---"
+    write_log "--- SERVICE STARTED v10.3 (TEST MODE) ---"
     while true; do
-        # === فاز ۱: قطع (۱۰ دقیقه) ===
+        # === فاز ۱: قطع (۳۰ ثانیه) ===
         if [ -s "$USER_LIST" ]; then
-            write_log "[$(date '+%H:%M:%S')] >>> LOCK & KILL (10 mins)"
+            write_log "[$(date '+%H:%M:%S')] >>> LOCK & KILL (30 Seconds)"
             while IFS= read -r user; do
                 chage -E 0 "$user"
                 pkill -KILL -u "$user"
@@ -47,7 +47,7 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED 🚫"
             done < "$USER_LIST"
         fi
-        sleep 600 
+        sleep 30  # <--- تغییر به ۳۰ ثانیه برای تست
 
         # === فاز ۲: وصل (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
@@ -57,19 +57,18 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
-        sleep 300 
+        sleep 300 # ۵ دقیقه وصل
     done
     exit 0
 fi
 
 # ====================================================
-# تنظیم پیام اخطار (متن جدید و دندان‌شکن)
+# تنظیم پیام اخطار
 # ====================================================
 set_banner() {
     header
     echo -e "${YELLOW}>>> Setting up Warning Message <<<${NC}"
     
-    # متن پیام (فارسی + فینگلیش)
     cat > "$BANNER_FILE" <<EOF
 ************************************************************
 * *
@@ -82,7 +81,6 @@ set_banner() {
 ************************************************************
 EOF
 
-    # اعمال در تنظیمات SSH
     if grep -q "Banner $BANNER_FILE" /etc/ssh/sshd_config; then
         echo "Config exists."
     else
@@ -90,7 +88,6 @@ EOF
         echo "Banner $BANNER_FILE" >> /etc/ssh/sshd_config
     fi
     
-    # ریستارت سرویس SSH
     service ssh restart
     service sshd restart
     
@@ -114,7 +111,7 @@ remove_banner() {
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v10.2 (Pay Your Bill)            ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v10.3 (Banner TEST Mode)         ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -166,69 +163,3 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    systemctl daemon-reload
-    systemctl enable dayus-manager
-    systemctl restart dayus-manager
-    
-    echo -e "${GREEN}Service UPDATED (10m OFF / 5m ON).${NC}"
-    sleep 2
-}
-
-disable_service() {
-    systemctl stop dayus-manager
-    systemctl disable dayus-manager
-    
-    if [ -s "$USER_LIST" ]; then
-        while IFS= read -r user; do
-            chage -E -1 "$user"
-        done < "$USER_LIST"
-    fi
-    echo -e "${GREEN}Stopped.${NC}"
-    sleep 2
-}
-
-watch_cinema() {
-    clear
-    echo -e "${YELLOW}--- LIVE LOGS ---${NC}"
-    tail -f "$LOG_FILE" | while read line; do
-        if [[ "$line" == *"KICKED"* ]]; then echo -e "${RED}$line${NC}";
-        elif [[ "$line" == *"ACTIVE"* ]]; then echo -e "${GREEN}$line${NC}";
-        else echo "$line"; fi
-    done
-}
-
-# منو
-while true; do
-    header
-    if systemctl is-active --quiet dayus-manager; then
-        echo -e "Status: ${GREEN}● RUNNING${NC}"
-    else
-        echo -e "Status: ${RED}● STOPPED${NC}"
-    fi
-    echo ""
-    
-    echo "1) Add User"
-    echo "2) Remove User"
-    echo "3) Show List"
-    echo "4) START / UPDATE Service"
-    echo "5) STOP Service"
-    echo -e "${BLUE}6) SET WARNING MESSAGE (Tasviye Kon)${NC}"
-    echo "7) Remove Warning Message"
-    echo -e "${YELLOW}8) WATCH LOGS 🍿${NC}"
-    echo "0) Exit"
-    echo ""
-    read -p "Select: " opt
-
-    case $opt in
-        1) add_user ;;
-        2) remove_user ;;
-        3) cat "$USER_LIST"; read -p "..." ;;
-        4) enable_service ;;
-        5) disable_service ;;
-        6) set_banner ;;
-        7) remove_banner ;;
-        8) watch_cinema ;;
-        0) exit 0 ;;
-    esac
-done
