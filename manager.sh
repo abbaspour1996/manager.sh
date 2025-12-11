@@ -1,9 +1,8 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v10.3 (Banner Test Mode)
+# Script Name: XPanel Manager v10.3 (FIXED)
 # Timing: 30 Sec OFF / 5 Min ON
-# Message: "Server is fine, Pay your bill..."
 # ===============================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -48,7 +47,7 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED 🚫"
             done < "$USER_LIST"
         fi
-        sleep 30  # <--- ۳۰ ثانیه برای تست
+        sleep 30  # زمان قطع
 
         # === فاز ۲: وصل (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
@@ -58,18 +57,18 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
-        sleep 300 # ۵ دقیقه وصل
+        sleep 300 # زمان وصل
     done
     exit 0
 fi
 
 # ====================================================
-# تنظیم پیام اخطار
+# توابع بنر و منو
 # ====================================================
+
 set_banner() {
-    header
-    echo -e "${YELLOW}>>> Setting up Warning Message <<<${NC}"
-    
+    clear
+    echo -e "${YELLOW}>>> Setting Warning Message <<<${NC}"
     cat > "$BANNER_FILE" <<EOF
 ************************************************************
 * *
@@ -81,17 +80,14 @@ set_banner() {
 * *
 ************************************************************
 EOF
-
     if grep -q "Banner $BANNER_FILE" /etc/ssh/sshd_config; then
         echo "Config exists."
     else
         sed -i '/^Banner/d' /etc/ssh/sshd_config
         echo "Banner $BANNER_FILE" >> /etc/ssh/sshd_config
     fi
-    
     service ssh restart
     service sshd restart
-    
     echo -e "${GREEN}Message Set!${NC}"
     sleep 2
 }
@@ -105,14 +101,10 @@ remove_banner() {
     sleep 2
 }
 
-# ====================================================
-# منو و ابزارها
-# ====================================================
-
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v10.3 (Banner TEST Mode)         ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v10.3 (TEST MODE 30s)            ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -152,7 +144,7 @@ enable_service() {
     echo -e "${YELLOW}Updating Service...${NC}"
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Dayus Manager Auto-Disconnect
+Description=Dayus Manager
 After=network.target
 
 [Service]
@@ -164,11 +156,9 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
-
     systemctl daemon-reload
     systemctl enable dayus-manager
     systemctl restart dayus-manager
-    
     echo -e "${GREEN}Service UPDATED (30s OFF / 5m ON).${NC}"
     sleep 2
 }
@@ -176,7 +166,6 @@ EOF
 disable_service() {
     systemctl stop dayus-manager
     systemctl disable dayus-manager
-    
     if [ -s "$USER_LIST" ]; then
         while IFS= read -r user; do
             chage -E -1 "$user"
@@ -196,7 +185,7 @@ watch_cinema() {
     done
 }
 
-# منو
+# منوی اصلی - چک کن این خط‌ها حتما کپی بشن
 while true; do
     header
     if systemctl is-active --quiet dayus-manager; then
@@ -205,15 +194,14 @@ while true; do
         echo -e "Status: ${RED}● STOPPED${NC}"
     fi
     echo ""
-    
     echo "1) Add User"
     echo "2) Remove User"
     echo "3) Show List"
     echo "4) START / UPDATE Service"
     echo "5) STOP Service"
-    echo -e "${BLUE}6) SET WARNING MESSAGE (Tasviye Kon)${NC}"
+    echo "6) SET WARNING MESSAGE"
     echo "7) Remove Warning Message"
-    echo -e "${YELLOW}8) WATCH LOGS 🍿${NC}"
+    echo "8) WATCH LOGS 🍿"
     echo "0) Exit"
     echo ""
     read -p "Select: " opt
