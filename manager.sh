@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v13.0 (Targeted Message)
+# Script Name: XPanel Manager v13.1 (Golden Edition)
 # Timing: 10 Min OFF / 5 Min ON
-# Feature: Banner ONLY for listed users (Match User)
+# Feature: Targeted Banner (Only for listed users)
+# Message: "Server Saleme... Tasviye Kon"
 # ===============================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -36,23 +37,21 @@ write_log() {
 # مدیریت هوشمند کانفیگ SSH (فقط برای یوزرهای لیست)
 # ====================================================
 update_ssh_config() {
-    # 1. اول پاکسازی تنظیمات قبلی اسکریپت از فایل کانفیگ
+    # 1. پاکسازی تنظیمات قبلی اسکریپت
     sed -i '/^# --- DAYUS START ---$/,/^# --- DAYUS END ---$/d' "$SSH_CONFIG"
-    # حذف خط‌های خالی اضافی ته فایل
     sed -i -e :a -e '/^\n*$/{$d;N;};/\n$/ba' "$SSH_CONFIG"
 
-    # 2. اگر لیست خالیه، دیگه کاری نداریم (پیام برای کسی نمیره)
+    # 2. اگر لیست خالیه، برمی‌گردیم
     if [ ! -s "$USER_LIST" ]; then
         service ssh restart >/dev/null 2>&1
         service sshd restart >/dev/null 2>&1
         return
     fi
 
-    # 3. ساختن لیست یوزرها با کاما (user1,user2,user3)
+    # 3. ساختن لیست یوزرها (user1,user2)
     USERS_COMMA=$(paste -sd, "$USER_LIST")
     
-    # 4. نوشتن بلاک Match User به ته فایل کانفیگ
-    # این دستور میگه: فقط برای این یوزرها، فایل بنر رو نشون بده
+    # 4. تزریق تنظیمات فقط برای این یوزرها
     cat >> "$SSH_CONFIG" <<EOF
 
 # --- DAYUS START ---
@@ -61,7 +60,7 @@ Match User $USERS_COMMA
 # --- DAYUS END ---
 EOF
 
-    # 5. ساخت فایل پیام
+    # 5. ساخت فایل پیام (همون متن عالی)
     cat > "$BANNER_FILE" <<EOF
 ************************************************************
 * *
@@ -74,7 +73,7 @@ EOF
 ************************************************************
 EOF
 
-    # 6. ریستارت سرویس برای اعمال تغییرات
+    # 6. ریستارت سرویس
     service ssh restart >/dev/null 2>&1
     service sshd restart >/dev/null 2>&1
 }
@@ -83,7 +82,7 @@ EOF
 # سرویس پشت‌صحنه (۱۰ دقیقه قطع / ۵ دقیقه وصل)
 # ====================================================
 if [ "$1" == "--service-run" ]; then
-    write_log "--- SERVICE STARTED v13.0 (Targeted) ---"
+    write_log "--- SERVICE STARTED v13.1 ---"
     while true; do
         # === فاز ۱: قطع (۱۰ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
@@ -96,7 +95,7 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED 🚫"
             done < "$USER_LIST"
         fi
-        sleep 600  # ۱۰ دقیقه قطع
+        sleep 600
 
         # === فاز ۲: وصل (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
@@ -106,7 +105,7 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
-        sleep 300 # ۵ دقیقه وصل
+        sleep 300
     done
     exit 0
 fi
@@ -117,7 +116,7 @@ fi
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v13.0 (Targeted Sniper)          ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v13.1 (Golden Edition)           ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -131,8 +130,8 @@ add_user() {
              echo "Already in list."
         else
              echo "$username" >> "$USER_LIST"
-             update_ssh_config # آپدیت کانفیگ SSH
-             echo -e "${GREEN}Added & Message Configured for $username.${NC}"
+             update_ssh_config # آپدیت کانفیگ و پیام
+             echo -e "${GREEN}Added & Targeted Message Set for $username.${NC}"
              echo "[$(date '+%H:%M:%S')] Added: $username" >> "$LOG_FILE"
         fi
     else
@@ -150,7 +149,7 @@ remove_user() {
     chage -E -1 "$selection" >/dev/null 2>&1
     sed -i "/^$selection$/d" "$USER_LIST"
     
-    update_ssh_config # آپدیت کانفیگ SSH (حذف یوزر از لیست پیام)
+    update_ssh_config # حذف یوزر از لیست پیام‌ها
     
     echo -e "${GREEN}Removed & Restored $selection${NC}"
     echo "[$(date '+%H:%M:%S')] Removed: $selection" >> "$LOG_FILE"
@@ -158,12 +157,12 @@ remove_user() {
 }
 
 enable_service() {
-    echo -e "${YELLOW}Updating Service & Configs...${NC}"
+    echo -e "${YELLOW}Updating Service & Message Rules...${NC}"
     
-    # پاکسازی بنر عمومی (Global Banner) اگر قبلاً فعال شده باشه
-    sed -i '/^Banner \/etc\/ssh\/dayus_warning.txt/d' "$SSH_CONFIG"
+    # پاکسازی کامل بنرهای قدیمی و عمومی
+    sed -i '/^Banner/d' "$SSH_CONFIG"
     
-    # اعمال تنظیمات جدید
+    # اعمال تنظیمات جدید (فقط برای یوزرهای لیست)
     update_ssh_config
 
     cat > "$SERVICE_FILE" <<EOF
@@ -184,7 +183,7 @@ EOF
     systemctl enable dayus-manager
     systemctl restart dayus-manager
     echo -e "${GREEN}Service STARTED (10m OFF / 5m ON).${NC}"
-    echo -e "${BLUE}Targeted Messaging Active (Only for listed users).${NC}"
+    echo -e "${BLUE}Targeted Message Active: 'Server Saleme...'${NC}"
     sleep 2
 }
 
@@ -197,7 +196,7 @@ disable_service() {
         done < "$USER_LIST"
     fi
     
-    # پاک کردن تنظیمات SSH
+    # پاکسازی تنظیمات SSH
     sed -i '/^# --- DAYUS START ---$/,/^# --- DAYUS END ---$/d' "$SSH_CONFIG"
     service ssh restart >/dev/null 2>&1
     
@@ -219,12 +218,12 @@ watch_cinema() {
 while true; do
     header
     if systemctl is-active --quiet dayus-manager; then
-        echo -e "Status: ${GREEN}● RUNNING (10m OFF / 5m ON)${NC}"
+        echo -e "Status: ${GREEN}● RUNNING (Targeted Message Active)${NC}"
     else
         echo -e "Status: ${RED}● STOPPED${NC}"
     fi
     echo ""
-    echo "1) Add User (Auto-Configure Message)"
+    echo "1) Add User (Auto-Set Message)"
     echo "2) Remove User"
     echo "3) Show List"
     echo "4) START / UPDATE Service"
