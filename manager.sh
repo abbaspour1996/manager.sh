@@ -1,67 +1,79 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v8.0 (Service Mode)
-# Features: Systemd Service, Auto-Start on Boot
+# Script Name: XPanel Manager v9.1 (Custom Timing)
+# Timing: 3 Min OFF / 1 Min ON
 # ===============================================
 
 USER_LIST="/root/dayus_users.txt"
+LOG_FILE="/var/log/dayus.log"
 SERVICE_FILE="/etc/systemd/system/dayus-manager.service"
 SCRIPT_PATH="/usr/local/bin/manager"
 
-# اطمینان از وجود فایل لیست
 if [ ! -f "$USER_LIST" ]; then touch "$USER_LIST"; fi
+if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}Please run as root!${NC}"
+  echo -e "${RED}Run as root!${NC}"
   exit
 fi
 
+write_log() {
+    echo "$1" >> "$LOG_FILE"
+}
+
 # ====================================================
-# بخش لاجیک اصلی (که توسط سرویس اجرا میشه)
+# سرویس پشت‌صحنه (با زمان‌بندی جدید)
 # ====================================================
 if [ "$1" == "--service-run" ]; then
+    write_log "--- SERVICE STARTED (Timing: 3m OFF / 1m ON) ---"
     while true; do
-        # === فاز ۱: قطع و انقضا (۱ دقیقه) ===
+        # === فاز ۱: قطع و انقضا (۳ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
+            write_log "[$(date '+%H:%M:%S')] >>> Phase: LOCK & KILL (Users Disabled for 3 mins)"
             while IFS= read -r user; do
-                # منقضی کردن اکانت (تاریخ انقضا = ۰)
                 chage -E 0 "$user"
-                # قطع اتصال‌های فعلی
                 pkill -KILL -u "$user"
                 killall -u "$user" -9
                 ps -ef | grep "sshd: $user" | awk '{print $2}' | xargs -r kill -9 2>/dev/null
+                write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED & EXPIRED 🚫"
             done < "$USER_LIST"
+        else
+            write_log "[$(date '+%H:%M:%S')] List is empty. Sleeping..."
         fi
         
-        sleep 60 # یک دقیقه خاموشی
+        # ۳ دقیقه صبر برای قطع بودن (۱۸۰ ثانیه)
+        sleep 180 
 
         # === فاز ۲: وصل و فعال‌سازی (۱ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
+            write_log "[$(date '+%H:%M:%S')] >>> Phase: RESTORE (Users Active for 1 min)"
             while IFS= read -r user; do
-                # برداشتن انقضا (فعال شدن اکانت)
                 chage -E -1 "$user"
+                write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
         
-        sleep 60 # یک دقیقه آزادی
+        # ۱ دقیقه صبر برای وصل بودن (۶۰ ثانیه)
+        sleep 60 
     done
     exit 0
 fi
 
 # ====================================================
-# بخش مدیریت و منو
+# منو و ابزارها
 # ====================================================
 
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v8.0 (Immortal Service Mode)     ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v9.1 (3m OFF / 1m ON)            ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -76,6 +88,7 @@ add_user() {
         else
              echo "$username" >> "$USER_LIST"
              echo -e "${GREEN}Added.${NC}"
+             echo "[$(date '+%H:%M:%S')] Added user: $username" >> "$LOG_FILE"
         fi
     else
         echo -e "${RED}User not found in Linux!${NC}"
@@ -89,21 +102,18 @@ remove_user() {
     cat -n "$USER_LIST"
     echo "----------------"
     read -p "Enter Username to remove: " selection
-    # قبل از حذف، آنلاکش میکنیم
     chage -E -1 "$selection" >/dev/null 2>&1
     sed -i "/^$selection$/d" "$USER_LIST"
     echo -e "${GREEN}Removed & Restored $selection${NC}"
+    echo "[$(date '+%H:%M:%S')] Removed user: $selection" >> "$LOG_FILE"
     sleep 1
 }
 
-# ساخت و فعال‌سازی سرویس (جادوی اصلی)
 enable_service() {
-    echo -e "${YELLOW}Creating Systemd Service...${NC}"
-    
-    # ساخت فایل سرویس
+    echo -e "${YELLOW}Installing Service...${NC}"
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Dayus Manager Auto-Disconnect Service
+Description=Dayus Manager Auto-Disconnect
 After=network.target
 
 [Service]
@@ -116,19 +126,16 @@ User=root
 WantedBy=multi-user.target
 EOF
 
-    # ریلود کردن دیمِن‌های لینوکس
     systemctl daemon-reload
-    # فعال کردن برای بوت (که بعد از ریستارت روشن شه)
     systemctl enable dayus-manager
-    # استارت زدن همین الان
-    systemctl start dayus-manager
     
-    echo -e "${GREEN}Service STARTED and ENABLED on Boot!${NC}"
-    echo -e "You can now close the terminal. It runs in background."
-    sleep 3
+    # ریستارت کردن سرویس برای اعمال تغییرات جدید
+    systemctl restart dayus-manager
+    
+    echo -e "${GREEN}Service STARTED with new timing!${NC}"
+    sleep 2
 }
 
-# غیرفعال کردن و پاکسازی
 disable_service() {
     echo -e "${YELLOW}Stopping Service...${NC}"
     systemctl stop dayus-manager
@@ -136,33 +143,51 @@ disable_service() {
     rm "$SERVICE_FILE" 2>/dev/null
     systemctl daemon-reload
     
-    echo -e "${YELLOW}Restoring all users...${NC}"
     if [ -s "$USER_LIST" ]; then
         while IFS= read -r user; do
             chage -E -1 "$user"
-            echo -e "Restored: $user"
         done < "$USER_LIST"
     fi
-    echo -e "${GREEN}All Stopped & Fixed.${NC}"
+    echo -e "${GREEN}Stopped & Users Unlocked.${NC}"
     sleep 2
 }
 
-# منوی اصلی
+watch_cinema() {
+    clear
+    echo -e "${YELLOW}--- LIVE MONITOR (3m OFF / 1m ON) ---${NC}"
+    echo -e "${BLUE}Waiting for action...${NC}"
+    echo "-------------------------------------------"
+    tail -f "$LOG_FILE" | while read line; do
+        if [[ "$line" == *"KICKED"* ]]; then
+            echo -e "${RED}$line${NC}"
+        elif [[ "$line" == *"ACTIVE"* ]]; then
+            echo -e "${GREEN}$line${NC}"
+        elif [[ "$line" == *"LOCK"* ]]; then
+            echo -e "${YELLOW}$line${NC}"
+        elif [[ "$line" == *"RESTORE"* ]]; then
+            echo -e "${BLUE}$line${NC}"
+        else
+            echo "$line"
+        fi
+    done
+}
+
+# منو
 while true; do
     header
-    # چک کردن وضعیت سرویس
     if systemctl is-active --quiet dayus-manager; then
-        echo -e "Status: ${GREEN}● ACTIVE (Running in Background)${NC}"
+        echo -e "Status: ${GREEN}● RUNNING (3m OFF / 1m ON)${NC}"
     else
-        echo -e "Status: ${RED}● INACTIVE (Stopped)${NC}"
+        echo -e "Status: ${RED}● STOPPED${NC}"
     fi
     echo ""
     
     echo "1) Add User"
     echo "2) Remove User"
     echo "3) Show List"
-    echo "4) START Service (Auto-Start on Boot)"
-    echo "5) STOP Service (Unlock Everyone)"
+    echo "4) START / UPDATE Service"
+    echo "5) STOP Service"
+    echo -e "${YELLOW}6) WATCH LOGS 🍿${NC}"
     echo "0) Exit"
     echo ""
     read -p "Select: " opt
@@ -173,6 +198,7 @@ while true; do
         3) cat "$USER_LIST"; read -p "..." ;;
         4) enable_service ;;
         5) disable_service ;;
+        6) watch_cinema ;;
         0) exit 0 ;;
     esac
 done
