@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v10.3 (FIXED)
-# Timing: 30 Sec OFF / 5 Min ON
+# Script Name: XPanel Manager v11.0 (FINAL STABLE)
+# Timing: 10 Min OFF / 5 Min ON
+# Features: Service + Banner + EOF Fix
 # ===============================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -31,14 +32,14 @@ write_log() {
 }
 
 # ====================================================
-# سرویس پشت‌صحنه (۳۰ ثانیه قطع / ۵ دقیقه وصل)
+# سرویس پشت‌صحنه (۱۰ دقیقه قطع / ۵ دقیقه وصل)
 # ====================================================
 if [ "$1" == "--service-run" ]; then
-    write_log "--- SERVICE STARTED v10.3 (TEST MODE) ---"
+    write_log "--- SERVICE STARTED v11.0 (PRODUCTION) ---"
     while true; do
-        # === فاز ۱: قطع (۳۰ ثانیه) ===
+        # === فاز ۱: قطع (۱۰ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
-            write_log "[$(date '+%H:%M:%S')] >>> LOCK & KILL (30 Seconds)"
+            write_log "[$(date '+%H:%M:%S')] >>> LOCK & KILL (10 Mins)"
             while IFS= read -r user; do
                 chage -E 0 "$user"
                 pkill -KILL -u "$user"
@@ -47,27 +48,26 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED 🚫"
             done < "$USER_LIST"
         fi
-        sleep 30  # زمان قطع
+        sleep 600  # ۱۰ دقیقه قطع
 
         # === فاز ۲: وصل (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
-            write_log "[$(date '+%H:%M:%S')] >>> RESTORE (5 mins)"
+            write_log "[$(date '+%H:%M:%S')] >>> RESTORE (5 Mins)"
             while IFS= read -r user; do
                 chage -E -1 "$user"
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
-        sleep 300 # زمان وصل
+        sleep 300 # ۵ دقیقه وصل
     done
     exit 0
 fi
 
 # ====================================================
-# توابع بنر و منو
+# تنظیم پیام اخطار
 # ====================================================
-
 set_banner() {
-    clear
+    header
     echo -e "${YELLOW}>>> Setting Warning Message <<<${NC}"
     cat > "$BANNER_FILE" <<EOF
 ************************************************************
@@ -101,10 +101,13 @@ remove_banner() {
     sleep 2
 }
 
+# ====================================================
+# منو و ابزارها
+# ====================================================
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v10.3 (TEST MODE 30s)            ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v11.0 (FINAL STABLE)             ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -159,7 +162,7 @@ EOF
     systemctl daemon-reload
     systemctl enable dayus-manager
     systemctl restart dayus-manager
-    echo -e "${GREEN}Service UPDATED (30s OFF / 5m ON).${NC}"
+    echo -e "${GREEN}Service STARTED (10m OFF / 5m ON).${NC}"
     sleep 2
 }
 
@@ -171,7 +174,7 @@ disable_service() {
             chage -E -1 "$user"
         done < "$USER_LIST"
     fi
-    echo -e "${GREEN}Stopped.${NC}"
+    echo -e "${GREEN}Stopped & Users Restored.${NC}"
     sleep 2
 }
 
@@ -185,11 +188,11 @@ watch_cinema() {
     done
 }
 
-# منوی اصلی - چک کن این خط‌ها حتما کپی بشن
+# منوی اصلی
 while true; do
     header
     if systemctl is-active --quiet dayus-manager; then
-        echo -e "Status: ${GREEN}● RUNNING (TEST MODE)${NC}"
+        echo -e "Status: ${GREEN}● RUNNING (10m OFF / 5m ON)${NC}"
     else
         echo -e "Status: ${RED}● STOPPED${NC}"
     fi
