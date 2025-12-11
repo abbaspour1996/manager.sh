@@ -12,6 +12,7 @@ SERVICE_FILE="/etc/systemd/system/dayus-manager.service"
 SCRIPT_PATH="/usr/local/bin/manager"
 BANNER_FILE="/etc/ssh/dayus_warning.txt"
 
+# اطمینان از وجود فایل‌ها
 if [ ! -f "$USER_LIST" ]; then touch "$USER_LIST"; fi
 if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 
@@ -47,7 +48,7 @@ if [ "$1" == "--service-run" ]; then
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: KICKED 🚫"
             done < "$USER_LIST"
         fi
-        sleep 30  # <--- تغییر به ۳۰ ثانیه برای تست
+        sleep 30  # <--- ۳۰ ثانیه برای تست
 
         # === فاز ۲: وصل (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
@@ -163,3 +164,69 @@ User=root
 [Install]
 WantedBy=multi-user.target
 EOF
+
+    systemctl daemon-reload
+    systemctl enable dayus-manager
+    systemctl restart dayus-manager
+    
+    echo -e "${GREEN}Service UPDATED (30s OFF / 5m ON).${NC}"
+    sleep 2
+}
+
+disable_service() {
+    systemctl stop dayus-manager
+    systemctl disable dayus-manager
+    
+    if [ -s "$USER_LIST" ]; then
+        while IFS= read -r user; do
+            chage -E -1 "$user"
+        done < "$USER_LIST"
+    fi
+    echo -e "${GREEN}Stopped.${NC}"
+    sleep 2
+}
+
+watch_cinema() {
+    clear
+    echo -e "${YELLOW}--- LIVE LOGS ---${NC}"
+    tail -f "$LOG_FILE" | while read line; do
+        if [[ "$line" == *"KICKED"* ]]; then echo -e "${RED}$line${NC}";
+        elif [[ "$line" == *"ACTIVE"* ]]; then echo -e "${GREEN}$line${NC}";
+        else echo "$line"; fi
+    done
+}
+
+# منو
+while true; do
+    header
+    if systemctl is-active --quiet dayus-manager; then
+        echo -e "Status: ${GREEN}● RUNNING (TEST MODE)${NC}"
+    else
+        echo -e "Status: ${RED}● STOPPED${NC}"
+    fi
+    echo ""
+    
+    echo "1) Add User"
+    echo "2) Remove User"
+    echo "3) Show List"
+    echo "4) START / UPDATE Service"
+    echo "5) STOP Service"
+    echo -e "${BLUE}6) SET WARNING MESSAGE (Tasviye Kon)${NC}"
+    echo "7) Remove Warning Message"
+    echo -e "${YELLOW}8) WATCH LOGS 🍿${NC}"
+    echo "0) Exit"
+    echo ""
+    read -p "Select: " opt
+
+    case $opt in
+        1) add_user ;;
+        2) remove_user ;;
+        3) cat "$USER_LIST"; read -p "..." ;;
+        4) enable_service ;;
+        5) disable_service ;;
+        6) set_banner ;;
+        7) remove_banner ;;
+        8) watch_cinema ;;
+        0) exit 0 ;;
+    esac
+done
