@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ===============================================
-# Script Name: XPanel Manager v9.1 (Custom Timing)
-# Timing: 3 Min OFF / 1 Min ON
+# Script Name: XPanel Manager v9.2 (5m ON / 10m OFF)
+# Timing: 10 Min OFF (Disconnect) / 5 Min ON (Connect)
 # ===============================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -29,14 +29,14 @@ write_log() {
 }
 
 # ====================================================
-# سرویس پشت‌صحنه (با زمان‌بندی جدید)
+# سرویس پشت‌صحنه (با زمان‌بندی ۱۰ دقیقه قطع / ۵ دقیقه وصل)
 # ====================================================
 if [ "$1" == "--service-run" ]; then
-    write_log "--- SERVICE STARTED (Timing: 3m OFF / 1m ON) ---"
+    write_log "--- SERVICE STARTED (Timing: 10m OFF / 5m ON) ---"
     while true; do
-        # === فاز ۱: قطع و انقضا (۳ دقیقه) ===
+        # === فاز ۱: قطع و انقضا (۱۰ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
-            write_log "[$(date '+%H:%M:%S')] >>> Phase: LOCK & KILL (Users Disabled for 3 mins)"
+            write_log "[$(date '+%H:%M:%S')] >>> Phase: LOCK & KILL (Users Disabled for 10 mins)"
             while IFS= read -r user; do
                 chage -E 0 "$user"
                 pkill -KILL -u "$user"
@@ -48,20 +48,20 @@ if [ "$1" == "--service-run" ]; then
             write_log "[$(date '+%H:%M:%S')] List is empty. Sleeping..."
         fi
         
-        # ۳ دقیقه صبر برای قطع بودن (۱۸۰ ثانیه)
-        sleep 180 
+        # ۱۰ دقیقه صبر برای قطع بودن (۶۰۰ ثانیه)
+        sleep 600 
 
-        # === فاز ۲: وصل و فعال‌سازی (۱ دقیقه) ===
+        # === فاز ۲: وصل و فعال‌سازی (۵ دقیقه) ===
         if [ -s "$USER_LIST" ]; then
-            write_log "[$(date '+%H:%M:%S')] >>> Phase: RESTORE (Users Active for 1 min)"
+            write_log "[$(date '+%H:%M:%S')] >>> Phase: RESTORE (Users Active for 5 mins)"
             while IFS= read -r user; do
                 chage -E -1 "$user"
                 write_log "[$(date '+%H:%M:%S')] Target: $user | Status: ACTIVE ✅"
             done < "$USER_LIST"
         fi
         
-        # ۱ دقیقه صبر برای وصل بودن (۶۰ ثانیه)
-        sleep 60 
+        # ۵ دقیقه صبر برای وصل بودن (۳۰۰ ثانیه)
+        sleep 300 
     done
     exit 0
 fi
@@ -73,7 +73,7 @@ fi
 header() {
     clear
     echo -e "${RED}####################################################${NC}"
-    echo -e "${YELLOW}    XPanel Manager v9.1 (3m OFF / 1m ON)            ${NC}"
+    echo -e "${YELLOW}    XPanel Manager v9.2 (10m OFF / 5m ON)           ${NC}"
     echo -e "${RED}####################################################${NC}"
     echo ""
 }
@@ -154,7 +154,7 @@ disable_service() {
 
 watch_cinema() {
     clear
-    echo -e "${YELLOW}--- LIVE MONITOR (3m OFF / 1m ON) ---${NC}"
+    echo -e "${YELLOW}--- LIVE MONITOR (10m OFF / 5m ON) ---${NC}"
     echo -e "${BLUE}Waiting for action...${NC}"
     echo "-------------------------------------------"
     tail -f "$LOG_FILE" | while read line; do
@@ -176,7 +176,7 @@ watch_cinema() {
 while true; do
     header
     if systemctl is-active --quiet dayus-manager; then
-        echo -e "Status: ${GREEN}● RUNNING (3m OFF / 1m ON)${NC}"
+        echo -e "Status: ${GREEN}● RUNNING (10m OFF / 5m ON)${NC}"
     else
         echo -e "Status: ${RED}● STOPPED${NC}"
     fi
