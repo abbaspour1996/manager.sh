@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Script Name: The Punisher v3.0 (Targeted Kill)
+# Script Name: The Punisher v4.0 (Nightmare)
 # ==========================================
 
 USER_LIST="/root/dayus_users.txt"
@@ -15,7 +15,6 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# چک کردن روت
 if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}Please run as root!${NC}"
   exit
@@ -26,9 +25,9 @@ touch "$LOG_FILE"
 
 header() {
     clear
-    echo -e "${CYAN}====================================================${NC}"
-    echo -e "${YELLOW}       XPanel User Manager v3.0 (Targeted)          ${NC}"
-    echo -e "${CYAN}====================================================${NC}"
+    echo -e "${RED}====================================================${NC}"
+    echo -e "${YELLOW}       XPanel User Manager v4.0 (Nightmare)         ${NC}"
+    echo -e "${RED}====================================================${NC}"
     echo ""
 }
 
@@ -36,37 +35,27 @@ log_action() {
     echo "[$(date '+%H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# تابع کشتن قدرتمند
-kill_user_process() {
+# تابع کشتن رگباری
+kill_user_burst() {
     local target_user=$1
-    local killed=0
-    
-    # روش ۱: پیدا کردن پروسه‌های SSHD اختصاصی (مهمترین بخش)
-    # این دستور دنبال پروسه‌هایی میگردد که فرمت sshd: user دارند
-    PIDS_SSH=$(ps -ef | grep "sshd: $target_user" | grep -v grep | awk '{print $2}')
-    
-    # روش ۲: پیدا کردن پروسه متعلق به خود یوزر
-    PIDS_USER=$(pgrep -u "$target_user")
-
-    # ترکیب همه PID ها
-    ALL_PIDS="$PIDS_SSH $PIDS_USER"
-    
-    if [ ! -z "$ALL_PIDS" ]; then
-        # حذف فضای خالی اضافه
-        ALL_PIDS=$(echo "$ALL_PIDS" | tr '\n' ' ')
+    # این حلقه به مدت 15 ثانیه، هر ثانیه یوزر را چک و قطع می‌کند
+    # تا اجازه ندهد بلافاصله ریکانکت شود.
+    for i in {1..10}; do
+        # پیدا کردن تمام پروسه‌های یوزر (SSH و غیره)
+        PIDS=$(pgrep -u "$target_user")
+        SSH_PIDS=$(ps -ef | grep "sshd: $target_user" | grep -v grep | awk '{print $2}')
         
-        log_action "Targeting $target_user | Found PIDs: $ALL_PIDS"
+        ALL_PIDS="$PIDS $SSH_PIDS"
         
-        # تیر خلاص
-        echo "$ALL_PIDS" | xargs -r kill -9
-        
-        log_action ">>> KILLED $target_user successfully."
-        killed=1
-    else
-        # فقط برای دیباگ مینویسیم که یوزر آنلاین نیست
-        # log_action "User $target_user is offline (No PIDs found)."
-        :
-    fi
+        if [ ! -z "$ALL_PIDS" ] && [ "$ALL_PIDS" != " " ]; then
+            # حذف پروسه‌ها با نهایت خشونت
+            echo "$ALL_PIDS" | xargs -r kill -9 > /dev/null 2>&1
+            pkill -9 -u "$target_user" > /dev/null 2>&1
+            killall -9 -u "$target_user" > /dev/null 2>&1
+        fi
+        sleep 1 # یک ثانیه مکث و دوباره ضربه زدن
+    done
+    log_action "Targeted $target_user with Burst Mode (10s lock)."
 }
 
 add_user() {
@@ -79,14 +68,12 @@ add_user() {
         else
              echo "$username" >> "$USER_LIST"
              echo -e "${GREEN}User '$username' added.${NC}"
-             log_action "Added user to list: $username"
         fi
     else
-        echo -e "${RED}Warning: User '$username' not found in system /etc/passwd!${NC}"
-        echo -e "But added to list anyway (maybe it's a virtual user)."
+        echo -e "${RED}User '$username' not found! Added to list anyway.${NC}"
         echo "$username" >> "$USER_LIST"
-        sleep 2
     fi
+    sleep 1
 }
 
 remove_user() {
@@ -97,14 +84,12 @@ remove_user() {
     read -p "Enter Username to remove: " selection
     sed -i "/^$selection$/d" "$USER_LIST"
     echo -e "${GREEN}Removed $selection${NC}"
-    log_action "Removed user from list: $selection"
     sleep 1
 }
 
 test_run() {
     header
-    echo -e "${YELLOW}Running TEST NOW (Check output below)...${NC}"
-    
+    echo -e "${YELLOW}Running BURST TEST (10 seconds attack)...${NC}"
     if [ ! -s "$USER_LIST" ]; then
         echo "List is empty."
         read -p "..."
@@ -112,15 +97,10 @@ test_run() {
     fi
 
     while IFS= read -r user; do
-        echo -e "Checking: ${CYAN}$user${NC}"
-        # نمایش زنده پروسه
-        ps -ef | grep "sshd: $user" | grep -v grep
-        
-        kill_user_process "$user"
-        echo "--------------------------------"
+        echo -e "Attacking: ${RED}$user${NC}"
+        kill_user_burst "$user"
+        echo -e "${GREEN}Attack finished for $user.${NC}"
     done < "$USER_LIST"
-    
-    echo "Done. Check logs for details."
     read -p "Press Enter..."
 }
 
@@ -133,23 +113,22 @@ start_punishment() {
         fi
     fi
     
-    echo -e "${RED}Starting Background Monitor...${NC}"
-    log_action "--- MONITOR STARTED ---"
+    echo -e "${RED}Starting Nightmare Monitor...${NC}"
     
-    # اجرای حلقه در بک‌گراند
+    # اجرای حلقه اصلی
     nohup bash -c "
     while true; do
         if [ -s $USER_LIST ]; then
             while IFS= read -r user; do
-                # بازنویسی منطق کشتن در ساب‌شل
-                PIDS=\$(ps -ef | grep \"sshd: \$user\" | grep -v grep | awk '{print \$2}')
-                if [ ! -z \"\$PIDS\" ]; then
-                    echo \"[\$(date '+%H:%M:%S')] Kicking \$user (PIDs: \$PIDS)\" >> $LOG_FILE
-                    echo \"\$PIDS\" | xargs -r kill -9
-                fi
+                # اجرای حمله رگباری برای هر یوزر
+                for i in {1..12}; do
+                   pgrep -u \"\$user\" | xargs -r kill -9
+                   ps -ef | grep \"sshd: \$user\" | grep -v grep | awk '{print \$2}' | xargs -r kill -9
+                   sleep 1
+                done
             done < $USER_LIST
         fi
-        sleep 120
+        sleep 120 # دو دقیقه استراحت
     done" >/dev/null 2>&1 &
     
     echo $! > "$PID_FILE"
@@ -162,34 +141,30 @@ stop_punishment() {
         kill $(cat "$PID_FILE")
         rm "$PID_FILE"
         echo -e "${GREEN}Stopped.${NC}"
-        log_action "--- MONITOR STOPPED ---"
     fi
     sleep 1
 }
 
 show_logs() {
     clear
-    echo -e "${YELLOW}Live Logs (Press Ctrl+C to exit logs):${NC}"
-    echo "---------------------------------"
     tail -f "$LOG_FILE"
 }
 
-# منوی اصلی
+# منو
 while true; do
     header
     if [ -f "$PID_FILE" ] && ps -p $(cat "$PID_FILE") > /dev/null; then
-        echo -e "Status: ${RED}ACTIVE [PID: $(cat $PID_FILE)]${NC}"
+        echo -e "Status: ${RED}ACTIVE (Nightmare Mode)${NC}"
     else
         echo -e "Status: ${GREEN}INACTIVE${NC}"
     fi
     
     echo "1) Add User (Diakoone)"
     echo "2) Remove User"
-    echo "3) Show Blacklist"
-    echo "4) START Monitor (Auto Kick)"
-    echo "5) STOP Monitor"
-    echo "6) TEST NOW (Manual Kick)"
-    echo "7) Watch Logs Live"
+    echo "3) Show List"
+    echo "4) START Punishment (ON)"
+    echo "5) STOP Punishment (OFF)"
+    echo "6) TEST BURST (Manual Attack)"
     echo "0) Exit"
     echo ""
     read -p "Select: " opt
@@ -201,7 +176,6 @@ while true; do
         4) start_punishment ;;
         5) stop_punishment ;;
         6) test_run ;;
-        7) show_logs ;;
         0) exit 0 ;;
     esac
 done
